@@ -1,0 +1,48 @@
+volunteer-management/
+├── backend/
+│   ├── cmd/
+│   │   └── server/
+│   │       └── main.go
+│   │
+│   ├── internal/
+│   │   ├── config/
+│   │   │   └── config.go
+│   │   ├── models/
+│   │   │   ├── user.go
+│   │   │   ├── volunteer.go
+│   │   │   ├── event.go
+│   │   │   ├── signup.go
+│   │   │   └── organization.go
+│   │   ├── handlers/
+│   │   │   ├── auth.go
+│   │   │   ├── volunteer.go
+│   │   │   ├── event.go
+│   │   │   └── signup.go
+│   │   ├── middleware/
+│   │   │   ├── auth.go
+│   │   │   └── ratelimit.go
+│   │   ├── repository/
+│   │   │   └── postgres/
+│   │   │       ├── user.go
+│   │   │       ├── volunteer.go
+│   │   │       ├── event.go
+│   │   │       └── signup.go
+│   │   └── service/
+│   │       ├── auth.go
+│   │       ├── volunteer.go
+│   │       ├── event.go
+│   │       └── signup.go
+│   │
+│   ├── pkg/
+│   │   ├── database/
+│   │   │   └── postgres.go
+│   │   ├── cache/
+│   │   │   └── redis.go
+│   │   └── utils/
+│   │       ├── jwt.go
+│   │       └── password.go
+│   │
+│   ├── Dockerfile
+│   ├── docker-compose.yml
+│   └── go.mod
+└── README.md 
