@@ -3,8 +3,6 @@ package service
 import (
 	"context"
 	"errors"
-	"fmt"
-	"log"
 	"time"
 	"volunteer-management/internal/models"
 	"volunteer-management/internal/repository"
@@ -17,67 +15,50 @@ var (
 )
 
 type EventService struct {
-	eventRepo    EventRepository
-	signupRepo   SignupRepository
-	cacheService *CacheService
+	eventRepo        repository.EventRepository
+	organizationRepo repository.OrganizationRepository
+	volunteerRepo    repository.VolunteerRepository
+	eventRegRepo     repository.EventRegistrationRepository
 }
 
-type EventRepository interface {
-	Create(ctx context.Context, input *models.CreateEventInput, createdBy int64) (*models.Event, error)
-	GetByID(ctx context.Context, id int64) (*models.Event, error)
-	Update(ctx context.Context, id int64, input *models.UpdateEventInput) (*models.Event, error)
-	Delete(ctx context.Context, id int64) error
-	List(ctx context.Context, offset, limit int) ([]*models.Event, error)
-	Search(ctx context.Context, params repository.SearchParams) ([]*models.Event, error)
-}
-
-func NewEventService(eventRepo EventRepository, signupRepo SignupRepository, cacheService *CacheService) *EventService {
+func NewEventService(
+	eventRepo repository.EventRepository,
+	organizationRepo repository.OrganizationRepository,
+	volunteerRepo repository.VolunteerRepository,
+	eventRegRepo repository.EventRegistrationRepository) *EventService {
 	return &EventService{
-		eventRepo:    eventRepo,
-		signupRepo:   signupRepo,
-		cacheService: cacheService,
+		eventRepo:        eventRepo,
+		organizationRepo: organizationRepo,
+		volunteerRepo:    volunteerRepo,
+		eventRegRepo:     eventRegRepo,
 	}
 }
 
-func (s *EventService) Create(ctx context.Context, input *models.CreateEventInput, userID int64) (*models.Event, error) {
-	event, err := s.eventRepo.Create(ctx, input, userID)
+func (s *EventService) Create(ctx context.Context, input *models.CreateEventInput, organizationID int64) (*models.Event, error) {
+	// Verify organization exists
+	org, err := s.organizationRepo.GetByID(ctx, organizationID)
 	if err != nil {
 		return nil, err
 	}
+	if org == nil {
+		return nil, errors.New("organization not found")
+	}
 
-	// Cache the new event
-	if err := s.cacheService.SetEvent(ctx, event); err != nil {
-		// Log error but don't fail the operation
-		// logger.Error("Failed to cache event", err)
+	event, err := s.eventRepo.Create(ctx, input, organizationID)
+	if err != nil {
+		return nil, err
 	}
 
 	return event, nil
 }
 
 func (s *EventService) GetByID(ctx context.Context, id int64) (*models.Event, error) {
-	// Try to get from cache first
-	event, err := s.cacheService.GetEvent(ctx, id)
-	if err != nil {
-		// Log error but continue to database
-		// logger.Error("Cache get failed", err)
-	}
-	if event != nil {
-		return event, nil
-	}
-
-	// If not in cache or cache failed, get from database
-	event, err = s.eventRepo.GetByID(ctx, id)
+	event, err := s.eventRepo.GetByID(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 	if event == nil {
 		return nil, ErrEventNotFound
-	}
-
-	// Cache the event for future requests
-	if err := s.cacheService.SetEvent(ctx, event); err != nil {
-		// Log error but don't fail the operation
-		// logger.Error("Failed to cache event", err)
 	}
 
 	return event, nil
@@ -89,20 +70,23 @@ func (s *EventService) Update(ctx context.Context, id int64, input *models.Updat
 		return nil, err
 	}
 
-	// Check if user is authorized to update the event
-	if event.CreatedBy != userID {
+	// Get organization for the user
+	org, err := s.organizationRepo.GetByUserID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if org == nil {
+		return nil, ErrUnauthorized
+	}
+
+	// Check if user is authorized to update the event (belongs to their organization)
+	if event.OrganizationID != org.ID {
 		return nil, ErrUnauthorized
 	}
 
 	event, err = s.eventRepo.Update(ctx, id, input)
 	if err != nil {
 		return nil, err
-	}
-
-	// Update cache
-	if err := s.cacheService.SetEvent(ctx, event); err != nil {
-		// Log error but don't fail the operation
-		// logger.Error("Failed to update event cache", err)
 	}
 
 	return event, nil
@@ -114,8 +98,17 @@ func (s *EventService) Delete(ctx context.Context, id int64, userID int64) error
 		return err
 	}
 
-	// Check if user is authorized to delete the event
-	if event.CreatedBy != userID {
+	// Get organization for the user
+	org, err := s.organizationRepo.GetByUserID(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if org == nil {
+		return ErrUnauthorized
+	}
+
+	// Check if user is authorized to delete the event (belongs to their organization)
+	if event.OrganizationID != org.ID {
 		return ErrUnauthorized
 	}
 
@@ -123,78 +116,103 @@ func (s *EventService) Delete(ctx context.Context, id int64, userID int64) error
 		return err
 	}
 
-	// Delete from cache
-	if err := s.cacheService.DeleteEvent(ctx, id); err != nil {
-		// Log error but don't fail the operation
-		// logger.Error("Failed to delete event from cache", err)
-	}
-
 	return nil
 }
 
 func (s *EventService) List(ctx context.Context, offset, limit int) ([]*models.Event, error) {
-	// Try to get from cache first
-	events, err := s.cacheService.GetEventList(ctx, offset/limit+1, limit)
-	if err != nil {
-		// Log error but continue to database
-		// logger.Error("Cache get failed", err)
-	}
-	if events != nil {
-		return events, nil
-	}
-
-	// If not in cache or cache failed, get from database
-	events, err = s.eventRepo.List(ctx, offset, limit)
+	events, err := s.eventRepo.List(ctx, offset, limit)
 	if err != nil {
 		return nil, err
-	}
-
-	// Cache the results
-	if err := s.cacheService.SetEventList(ctx, events, offset/limit+1, limit); err != nil {
-		// Log error but don't fail the operation
-		// logger.Error("Failed to cache event list", err)
 	}
 
 	return events, nil
 }
 
-func (s *EventService) Search(ctx context.Context, date time.Time, location string, skills []string, offset, limit int) ([]*models.Event, error) {
-	// Try to get from cache first
-	cacheKey := fmt.Sprintf("search:%s:%s:%v:%d:%d",
-		date.Format("2006-01-02"),
-		location,
-		skills,
-		offset,
-		limit,
-	)
-
-	var events []*models.Event
-	err := s.cacheService.cache.Get(ctx, cacheKey, &events)
-	if err == nil && events != nil {
-		return events, nil
-	}
-
-	// If not in cache, search in database
-	params := repository.SearchParams{
-		Date:     date,
-		Location: location,
-		Skills:   skills,
-		Offset:   offset,
-		Limit:    limit,
-	}
-
-	events, err = s.eventRepo.Search(ctx, params)
+func (s *EventService) ListByOrganization(ctx context.Context, organizationID int64, offset, limit int) ([]*models.Event, error) {
+	events, err := s.eventRepo.ListByOrganization(ctx, organizationID, offset, limit)
 	if err != nil {
 		return nil, err
 	}
 
-	// Cache the results
-	if err := s.cacheService.cache.Set(ctx, cacheKey, events, 5*time.Minute); err != nil {
-		// Log error but don't fail the operation
-		log.Printf("Failed to cache search results: %v", err)
+	return events, nil
+}
+
+func (s *EventService) ListByVolunteer(ctx context.Context, volunteerID int64, offset, limit int) ([]*models.Event, error) {
+	events, err := s.eventRepo.ListByVolunteer(ctx, volunteerID, offset, limit)
+	if err != nil {
+		return nil, err
 	}
 
 	return events, nil
+}
+
+func (s *EventService) Search(ctx context.Context, date time.Time, location string, skills []string, status string, category string, offset, limit int) ([]*models.Event, error) {
+	// Search in database
+	params := repository.SearchParams{
+		Date:     date,
+		Location: location,
+		Skills:   skills,
+		Status:   status,
+		Category: category,
+		Offset:   offset,
+		Limit:    limit,
+	}
+
+	events, err := s.eventRepo.Search(ctx, params)
+	if err != nil {
+		return nil, err
+	}
+
+	return events, nil
+}
+
+func (s *EventService) RegisterForEvent(ctx context.Context, eventID, volunteerID int64) (*models.EventRegistration, error) {
+	event, err := s.GetByID(ctx, eventID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check if volunteer exists
+	volunteer, err := s.volunteerRepo.GetByID(ctx, volunteerID)
+	if err != nil {
+		return nil, err
+	}
+	if volunteer == nil {
+		return nil, errors.New("volunteer not found")
+	}
+
+	// Check event capacity
+	registrations, err := s.eventRegRepo.ListByEvent(ctx, eventID, 0, 1000)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(registrations) >= event.VolunteersNeeded {
+		return nil, ErrEventCapacityFull
+	}
+
+	// Check if already registered
+	existingReg, err := s.eventRegRepo.GetByEventAndVolunteer(ctx, eventID, volunteerID)
+	if err != nil {
+		return nil, err
+	}
+	if existingReg != nil {
+		return existingReg, nil // Already registered
+	}
+
+	// Create registration
+	input := &models.CreateEventRegistrationInput{
+		EventID:     eventID,
+		VolunteerID: volunteerID,
+		Status:      "registered",
+	}
+
+	registration, err := s.eventRegRepo.Create(ctx, input)
+	if err != nil {
+		return nil, err
+	}
+
+	return registration, nil
 }
 
 func (s *EventService) CheckCapacity(ctx context.Context, eventID int64) (bool, error) {
@@ -203,10 +221,10 @@ func (s *EventService) CheckCapacity(ctx context.Context, eventID int64) (bool, 
 		return false, err
 	}
 
-	count, err := s.signupRepo.CountByEvent(ctx, eventID)
+	registrations, err := s.eventRegRepo.ListByEvent(ctx, eventID, 0, 1000)
 	if err != nil {
 		return false, err
 	}
 
-	return count < int64(event.Capacity), nil
+	return len(registrations) < event.VolunteersNeeded, nil
 }

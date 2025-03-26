@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"volunteer-management/internal/models"
+	"volunteer-management/internal/repository"
 	"volunteer-management/internal/websocket"
 	"volunteer-management/pkg/cache"
 )
@@ -17,7 +18,7 @@ var (
 
 type SignupService struct {
 	signupRepo    SignupRepository
-	eventRepo     EventRepository
+	eventRepo     repository.EventRepository
 	volunteerRepo VolunteerRepository
 	cacheService  *CacheService
 	wsManager     *websocket.Manager
@@ -34,7 +35,7 @@ type SignupRepository interface {
 	CountByEvent(ctx context.Context, eventID int64) (int64, error)
 }
 
-func NewSignupService(signupRepo SignupRepository, eventRepo EventRepository, volunteerRepo VolunteerRepository, cacheService *CacheService, wsManager *websocket.Manager) *SignupService {
+func NewSignupService(signupRepo SignupRepository, eventRepo repository.EventRepository, volunteerRepo VolunteerRepository, cacheService *CacheService, wsManager *websocket.Manager) *SignupService {
 	return &SignupService{
 		signupRepo:    signupRepo,
 		eventRepo:     eventRepo,
@@ -77,7 +78,7 @@ func (s *SignupService) Create(ctx context.Context, input *models.CreateSignupIn
 	if err != nil {
 		return nil, err
 	}
-	if count >= int64(event.Capacity) {
+	if count >= int64(event.VolunteersNeeded) {
 		return nil, ErrEventCapacityFull
 	}
 

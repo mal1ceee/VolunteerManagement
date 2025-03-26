@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"volunteer-management/internal/models"
+	"volunteer-management/internal/repository"
 	"volunteer-management/pkg/cache"
 )
 
@@ -15,7 +16,7 @@ var (
 
 type VolunteerService struct {
 	volunteerRepo VolunteerRepository
-	userRepo      UserRepository
+	userRepo      repository.UserRepository
 	cacheService  *CacheService
 }
 
@@ -28,7 +29,7 @@ type VolunteerRepository interface {
 	List(ctx context.Context, offset, limit int) ([]*models.Volunteer, error)
 }
 
-func NewVolunteerService(volunteerRepo VolunteerRepository, userRepo UserRepository, cacheService *CacheService) *VolunteerService {
+func NewVolunteerService(volunteerRepo VolunteerRepository, userRepo repository.UserRepository, cacheService *CacheService) *VolunteerService {
 	return &VolunteerService{
 		volunteerRepo: volunteerRepo,
 		userRepo:      userRepo,

@@ -4,13 +4,14 @@ import (
 	"os"
 	"strconv"
 	"time"
+	"volunteer-management/pkg/utils"
 )
 
 type Config struct {
 	Server   ServerConfig
 	Database DatabaseConfig
 	Redis    RedisConfig
-	JWT      JWTConfig
+	JWT      *utils.JWTConfig
 }
 
 type ServerConfig struct {
@@ -35,12 +36,6 @@ type RedisConfig struct {
 	DB       int
 }
 
-type JWTConfig struct {
-	Secret        string
-	TokenExpiry   time.Duration
-	RefreshExpiry time.Duration
-}
-
 func Load() *Config {
 	return &Config{
 		Server: ServerConfig{
@@ -62,10 +57,10 @@ func Load() *Config {
 			Password: getEnv("REDIS_PASSWORD", ""),
 			DB:       getIntEnv("REDIS_DB", 0),
 		},
-		JWT: JWTConfig{
-			Secret:        getEnv("JWT_SECRET", "your-secret-key"),
-			TokenExpiry:   getDurationEnv("JWT_EXPIRY", 24*time.Hour),
-			RefreshExpiry: getDurationEnv("JWT_REFRESH_EXPIRY", 7*24*time.Hour),
+		JWT: &utils.JWTConfig{
+			Secret:             getEnv("JWT_SECRET", "your-secret-key"),
+			AccessTokenExpiry:  getDurationEnv("JWT_ACCESS_EXPIRY", 24*time.Hour),
+			RefreshTokenExpiry: getDurationEnv("JWT_REFRESH_EXPIRY", 7*24*time.Hour),
 		},
 	}
 }

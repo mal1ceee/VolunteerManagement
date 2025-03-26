@@ -135,6 +135,8 @@ func (h *EventHandler) Search(c *gin.Context) {
 	dateStr := c.Query("date")
 	location := c.Query("location")
 	skillsStr := c.Query("skills")
+	status := c.Query("status")
+	category := c.Query("category")
 	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
 
@@ -160,7 +162,7 @@ func (h *EventHandler) Search(c *gin.Context) {
 	offset = utils.ValidateOffset(offset)
 
 	// Perform search
-	events, err := h.eventService.Search(c.Request.Context(), date, location, skills, offset, limit)
+	events, err := h.eventService.Search(c.Request.Context(), date, location, skills, status, category, offset, limit)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to search events"})
 		return

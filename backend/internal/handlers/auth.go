@@ -17,6 +17,7 @@ func NewAuthHandler(authService *service.AuthService) *AuthHandler {
 	}
 }
 
+// Register handles user registration
 func (h *AuthHandler) Register(c *gin.Context) {
 	var input service.RegisterInput
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -38,6 +39,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	c.JSON(http.StatusCreated, response)
 }
 
+// Login handles user authentication
 func (h *AuthHandler) Login(c *gin.Context) {
 	var input service.LoginInput
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -57,6 +59,42 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, response)
+}
+
+// RefreshToken handles refreshing an auth token
+func (h *AuthHandler) RefreshToken(c *gin.Context) {
+	// Implementation for refreshing token
+	c.JSON(http.StatusNotImplemented, gin.H{"message": "Not implemented yet"})
+}
+
+// Logout handles user logout
+func (h *AuthHandler) Logout(c *gin.Context) {
+	// Implementation for logout
+	c.JSON(http.StatusOK, gin.H{"message": "Successfully logged out"})
+}
+
+// GetCurrentUser retrieves the current authenticated user
+func (h *AuthHandler) GetCurrentUser(c *gin.Context) {
+	userID, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	// Implementation for getting user details
+	c.JSON(http.StatusNotImplemented, gin.H{"message": "Not implemented yet", "userID": userID})
+}
+
+// UpdateCurrentUser updates the current user's details
+func (h *AuthHandler) UpdateCurrentUser(c *gin.Context) {
+	// Implementation for updating user details
+	c.JSON(http.StatusNotImplemented, gin.H{"message": "Not implemented yet"})
+}
+
+// ChangePassword handles password change requests
+func (h *AuthHandler) ChangePassword(c *gin.Context) {
+	// Implementation for changing password
+	c.JSON(http.StatusNotImplemented, gin.H{"message": "Not implemented yet"})
 }
 
 func (h *AuthHandler) RegisterRoutes(router *gin.Engine) {

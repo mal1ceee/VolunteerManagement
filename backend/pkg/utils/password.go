@@ -11,21 +11,20 @@ var (
 	MinPasswordLen   = 6
 )
 
-// HashPassword takes a plain text password and returns its bcrypt hash
+// HashPassword generates a bcrypt hash from a password
 func HashPassword(password string) (string, error) {
 	if len(password) < MinPasswordLen {
 		return "", errors.New("password must be at least 6 characters long")
 	}
 
-	hashedBytes, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	bytes, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
-		return "", ErrHashingFailed
+		return "", err
 	}
-
-	return string(hashedBytes), nil
+	return string(bytes), nil
 }
 
-// CheckPasswordHash compares a plain text password with a hashed password
+// CheckPasswordHash compares a password with a bcrypt hash
 func CheckPasswordHash(password, hash string) bool {
 	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
 	return err == nil

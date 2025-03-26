@@ -9,66 +9,86 @@ import (
 )
 
 var (
-	jwtSecret       = []byte("your-secret-key") // Should be loaded from config
-	accessTokenExp  = 24 * time.Hour
-	refreshTokenExp = 7 * 24 * time.Hour
 	ErrInvalidToken = errors.New("invalid token")
-	ErrExpiredToken = errors.New("token has expired")
 )
 
+// JWTConfig holds configuration for JWT tokens
+type JWTConfig struct {
+	Secret             string
+	AccessTokenExpiry  time.Duration
+	RefreshTokenExpiry time.Duration
+}
+
+// Claims represents the JWT claims
 type Claims struct {
 	UserID int64  `json:"user_id"`
 	Role   string `json:"role"`
 	jwt.RegisteredClaims
 }
 
-func GenerateAccessToken(user *models.User) (string, error) {
-	claims := Claims{
+// GenerateAccessToken generates a new JWT access token for a user
+func GenerateAccessToken(user *models.User, secret string, expiry time.Duration) (string, error) {
+	// Set expiration time
+	expirationTime := time.Now().Add(expiry)
+
+	// Create claims
+	claims := &Claims{
 		UserID: user.ID,
 		Role:   string(user.Role),
 		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(accessTokenExp)),
+			ExpiresAt: jwt.NewNumericDate(expirationTime),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 		},
 	}
 
+	// Create token
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString(jwtSecret)
+
+	// Sign token with secret key
+	return token.SignedString([]byte(secret))
 }
 
-func GenerateRefreshToken(user *models.User) (string, error) {
-	claims := Claims{
+// GenerateRefreshToken generates a new JWT refresh token for a user
+func GenerateRefreshToken(user *models.User, secret string, expiry time.Duration) (string, error) {
+	// Set expiration time (refresh tokens usually have longer expiry)
+	expirationTime := time.Now().Add(expiry)
+
+	// Create claims
+	claims := &Claims{
 		UserID: user.ID,
 		Role:   string(user.Role),
 		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(refreshTokenExp)),
+			ExpiresAt: jwt.NewNumericDate(expirationTime),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 		},
 	}
 
+	// Create token
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString(jwtSecret)
+
+	// Sign token with secret key
+	return token.SignedString([]byte(secret))
 }
 
-func VerifyToken(tokenString string) (*Claims, error) {
-	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
+// VerifyToken validates a JWT token and returns the claims
+func VerifyToken(tokenStr string, secret string) (jwt.MapClaims, error) {
+	// Parse token
+	token, err := jwt.Parse(tokenStr, func(token *jwt.Token) (interface{}, error) {
+		// Validate signing method
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, ErrInvalidToken
 		}
-		return jwtSecret, nil
+		return []byte(secret), nil
 	})
 
 	if err != nil {
-		if errors.Is(err, jwt.ErrTokenExpired) {
-			return nil, ErrExpiredToken
-		}
-		return nil, ErrInvalidToken
+		return nil, err
 	}
 
-	claims, ok := token.Claims.(*Claims)
-	if !ok || !token.Valid {
-		return nil, ErrInvalidToken
+	// Validate token and extract claims
+	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
+		return claims, nil
 	}
 
-	return claims, nil
+	return nil, ErrInvalidToken
 }
