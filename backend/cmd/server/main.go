@@ -13,6 +13,7 @@ import (
 	"volunteer-management/internal/middleware"
 	"volunteer-management/internal/models"
 	"volunteer-management/internal/repository/postgres"
+	"volunteer-management/internal/routes"
 	"volunteer-management/internal/service"
 	"volunteer-management/internal/websocket"
 	"volunteer-management/pkg/database"
@@ -77,13 +78,28 @@ func main() {
 	// Initialize services
 	// Using the adapter to satisfy the interface
 	authService := service.NewAuthService(userRepo, cfg.JWT)
-	/* Temporarily commenting out problematic service initializations
-	eventService := service.NewEventService(eventRepo, organizationRepo, volunteerRepo, eventRegRepo)
-	volunteerService := service.NewVolunteerService(volunteerRepo, userRepo, eventRegRepo)
-	organizationService := service.NewOrganizationService(organizationRepo, userRepo, eventRepo)
-	messageService := service.NewMessageService(messageRepo, conversationRepo, userRepo)
-	analyticsService := service.NewAnalyticsService(analyticsRepo, userRepo, eventRepo, organizationRepo, volunteerRepo)
-	*/
+	eventService := service.NewEventService(db)
+	signupService := service.NewSignupService(db)
+	organizationService := service.NewOrganizationService(db)
+	volunteerService := service.NewVolunteerService(db)
+	messageService := service.NewMessageService(db)
+	analyticsService := service.NewAnalyticsService(db)
+
+	// Initialize handlers
+	handlers := handlers.NewHandlers(
+		authService,
+		eventService,
+		signupService,
+		organizationService,
+		volunteerService,
+		messageService,
+		analyticsService,
+		wsManager,
+	)
+
+	// Initialize middleware
+	authMiddleware := middleware.NewAuthMiddleware(authService)
+	roleMiddleware := middleware.NewRoleMiddleware()
 
 	// Initialize Gin router
 	router := gin.Default()
@@ -102,121 +118,8 @@ func main() {
 	router.Use(gin.Recovery())
 	router.Use(gin.Logger())
 
-	// Create middleware instances
-	authMiddleware := middleware.NewAuthMiddleware(authService)
-
-	// Initialize handlers
-	authHandler := handlers.NewAuthHandler(authService)
-	/* Temporarily commenting out problematic handler initializations
-	eventHandler := handlers.NewEventHandler(eventService)
-	volunteerHandler := handlers.NewVolunteerHandler(volunteerService)
-	organizationHandler := handlers.NewOrganizationHandler(organizationService)
-	messageHandler := handlers.NewMessageHandler(messageService)
-	analyticsHandler := handlers.NewAnalyticsHandler(analyticsService)
-	*/
-	wsHandler := handlers.NewWebSocketHandler(wsManager)
-
-	// Register WebSocket routes
-	wsHandler.RegisterRoutes(router, authMiddleware.AuthRequired())
-
-	// API routes
-	api := router.Group("/api")
-	{
-		// Auth routes
-		auth := api.Group("/auth")
-		{
-			auth.POST("/login", authHandler.Login)
-			auth.POST("/register", authHandler.Register)
-			auth.POST("/refresh", authHandler.RefreshToken)
-			auth.POST("/logout", authMiddleware.AuthRequired(), authHandler.Logout)
-		}
-
-		// User routes
-		users := api.Group("/users")
-		users.Use(authMiddleware.AuthRequired())
-		{
-			users.GET("/me", authHandler.GetCurrentUser)
-			users.PUT("/me", authHandler.UpdateCurrentUser)
-			users.PUT("/me/password", authHandler.ChangePassword)
-		}
-
-		/* Temporarily commenting out problematic routes
-		// Events routes
-		events := api.Group("/events")
-		{
-			events.GET("", eventHandler.ListEvents)
-			events.GET("/:id", eventHandler.GetEvent)
-			events.POST("", authMiddleware.AuthRequired(), authMiddleware.RoleRequired(string(models.RoleOrganization)), eventHandler.CreateEvent)
-			events.PUT("/:id", authMiddleware.AuthRequired(), authMiddleware.RoleRequired(string(models.RoleOrganization)), eventHandler.UpdateEvent)
-			events.DELETE("/:id", authMiddleware.AuthRequired(), authMiddleware.RoleRequired(string(models.RoleOrganization)), eventHandler.DeleteEvent)
-			events.GET("/search", eventHandler.SearchEvents)
-			events.GET("/upcoming", eventHandler.ListUpcomingEvents)
-
-			// Registration for events
-			events.POST("/:id/register", authMiddleware.AuthRequired(), authMiddleware.RoleRequired(string(models.RoleVolunteer)), eventHandler.RegisterForEvent)
-			events.PUT("/:id/registration/:regId", authMiddleware.AuthRequired(), authMiddleware.RoleRequired(string(models.RoleOrganization)), eventHandler.UpdateRegistration)
-			events.GET("/:id/volunteers", authMiddleware.AuthRequired(), eventHandler.ListEventVolunteers)
-		}
-
-		// Volunteer routes
-		volunteers := api.Group("/volunteers")
-		{
-			volunteers.GET("", authMiddleware.AuthRequired(), authMiddleware.RoleRequired(string(models.RoleAdmin), string(models.RoleOrganization)), volunteerHandler.ListVolunteers)
-			volunteers.GET("/:id", volunteerHandler.GetVolunteer)
-			volunteers.GET("/profile", authMiddleware.AuthRequired(), authMiddleware.RoleRequired(string(models.RoleVolunteer)), volunteerHandler.GetVolunteerProfile)
-			volunteers.PUT("/profile", authMiddleware.AuthRequired(), authMiddleware.RoleRequired(string(models.RoleVolunteer)), volunteerHandler.UpdateVolunteerProfile)
-			volunteers.GET("/stats", authMiddleware.AuthRequired(), authMiddleware.RoleRequired(string(models.RoleVolunteer)), volunteerHandler.GetVolunteerStats)
-			volunteers.GET("/events", authMiddleware.AuthRequired(), authMiddleware.RoleRequired(string(models.RoleVolunteer)), volunteerHandler.ListVolunteerEvents)
-			volunteers.GET("/achievements", authMiddleware.AuthRequired(), authMiddleware.RoleRequired(string(models.RoleVolunteer)), volunteerHandler.GetVolunteerAchievements)
-		}
-
-		// Organization routes
-		organizations := api.Group("/organizations")
-		{
-			organizations.GET("", organizationHandler.ListOrganizations)
-			organizations.GET("/:id", organizationHandler.GetOrganization)
-			organizations.GET("/profile", authMiddleware.AuthRequired(), authMiddleware.RoleRequired(string(models.RoleOrganization)), organizationHandler.GetOrganizationProfile)
-			organizations.PUT("/profile", authMiddleware.AuthRequired(), authMiddleware.RoleRequired(string(models.RoleOrganization)), organizationHandler.UpdateOrganizationProfile)
-			organizations.GET("/stats", authMiddleware.AuthRequired(), authMiddleware.RoleRequired(string(models.RoleOrganization)), organizationHandler.GetOrganizationStats)
-			organizations.GET("/events", authMiddleware.AuthRequired(), authMiddleware.RoleRequired(string(models.RoleOrganization)), organizationHandler.ListOrganizationEvents)
-			organizations.GET("/pending", authMiddleware.AuthRequired(), authMiddleware.RoleRequired(string(models.RoleAdmin)), organizationHandler.ListPendingOrganizations)
-			organizations.PUT("/:id/verify", authMiddleware.AuthRequired(), authMiddleware.RoleRequired(string(models.RoleAdmin)), organizationHandler.VerifyOrganization)
-		}
-
-		// Message routes
-		messages := api.Group("/messages")
-		messages.Use(authMiddleware.AuthRequired())
-		{
-			messages.GET("/conversations", messageHandler.ListConversations)
-			messages.GET("/conversations/:id", messageHandler.GetConversation)
-			messages.POST("/conversations", messageHandler.CreateConversation)
-			messages.GET("/conversations/:id/messages", messageHandler.ListMessages)
-			messages.POST("/send", messageHandler.SendMessage)
-			messages.PUT("/messages/:id/read", messageHandler.MarkAsRead)
-			messages.PUT("/conversations/:id/read", messageHandler.MarkAllAsRead)
-		}
-
-		// Analytics routes
-		analytics := api.Group("/analytics")
-		analytics.Use(authMiddleware.AuthRequired())
-		{
-			// Admin analytics
-			analytics.GET("/admin/dashboard", authMiddleware.RoleRequired(string(models.RoleAdmin)), analyticsHandler.GetAdminDashboardStats)
-			analytics.GET("/admin/recent-activity", authMiddleware.RoleRequired(string(models.RoleAdmin)), analyticsHandler.GetRecentActivity)
-			analytics.GET("/admin/top-organizations", authMiddleware.RoleRequired(string(models.RoleAdmin)), analyticsHandler.GetTopOrganizations)
-			analytics.GET("/admin/upcoming-events", authMiddleware.RoleRequired(string(models.RoleAdmin)), analyticsHandler.GetUpcomingEvents)
-			analytics.GET("/admin/volunteer-demographics", authMiddleware.RoleRequired(string(models.RoleAdmin)), analyticsHandler.GetVolunteerDemographics)
-			analytics.GET("/admin/event-attendance", authMiddleware.RoleRequired(string(models.RoleAdmin)), analyticsHandler.GetEventAttendance)
-
-			// Organization analytics
-			analytics.GET("/organization", authMiddleware.RoleRequired(string(models.RoleOrganization)), analyticsHandler.GetOrganizationStats)
-			analytics.GET("/organization/events", authMiddleware.RoleRequired(string(models.RoleOrganization)), analyticsHandler.GetOrganizationEventStats)
-
-			// Volunteer analytics
-			analytics.GET("/volunteer", authMiddleware.RoleRequired(string(models.RoleVolunteer)), analyticsHandler.GetVolunteerStats)
-		}
-		*/
-	}
+	// Setup routes
+	routes.SetupRoutes(router, handlers, authMiddleware, roleMiddleware)
 
 	// Initialize server
 	srv := &http.Server{

@@ -24,6 +24,7 @@ services:
 
   postgres:
     image: postgres:14-alpine
+    command: postgres -c 'listen_addresses=*'
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
@@ -32,6 +33,7 @@ services:
       - "5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
+      - ./pg_hba.conf:/var/lib/postgresql/data/pg_hba.conf
     networks:
       - volunteer-network
 
